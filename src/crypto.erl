@@ -21,9 +21,18 @@ solutions(This, Cipherwords) ->
 solutions(_This, [], _Key) ->
     [];
 solutions(This, Cipherwords, Key) ->
-    Possibilities =
+    try
 	[{Cw, dictionary:plainwords(This#crypto.dictionary, Cw, Key)} ||
-	    Cw <- Cipherwords],
+	    Cw <- Cipherwords]
+    of
+	Possibilities ->
+	    handle_possibilities(This, Cipherwords, Key, Possibilities)
+    catch
+	throw:no_plainwords ->
+	    []
+    end.
+
+handle_possibilities(This, Cipherwords, Key, Possibilities) ->
     {Cipherword, Plainwords} =
 	spud:min_by(
 	  Possibilities,
