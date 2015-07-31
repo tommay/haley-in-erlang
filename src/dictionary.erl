@@ -9,7 +9,7 @@ new(Filename) ->
 
 load_words(Filename) ->
     {ok, Raw} = file:read_file(Filename),
-    re:split(Raw, "\\n", [{return, list}]).
+    re:split(Raw, "\\n").
 
 plainwords(This, Cipherword, Key) ->
     Regexp = make_regexp(Cipherword, Key),

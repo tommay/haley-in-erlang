@@ -61,7 +61,7 @@ handle_possibilities(This, Cipherwords, Key, Possibilities) ->
       Plainwords).
 
 make_key(Key, Cipherword, Plainword) ->
-    Zipped = lists:zip(Cipherword, Plainword),
+    Zipped = lists:zip(Cipherword, binary:bin_to_list(Plainword)),
     lists:foldl(
       fun ({C, P}, Accum) ->
 	      key:set(Accum, C, P)
