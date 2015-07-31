@@ -22,14 +22,21 @@ solutions(_This, [], _Key) ->
     [];
 solutions(This, Cipherwords, Key) ->
     try
-	[{Cw, dictionary:plainwords(This#crypto.dictionary, Cw, Key)} ||
-	    Cw <- Cipherwords]
+	[{Cw, get_plainwords(This, Cw, Key)} || Cw <- Cipherwords]
     of
 	Possibilities ->
 	    handle_possibilities(This, Cipherwords, Key, Possibilities)
     catch
 	throw:no_plainwords ->
 	    []
+    end.
+
+get_plainwords(This, Cw, Key) ->
+    case dictionary:plainwords(This#crypto.dictionary, Cw, Key) of
+	[] ->
+	    throw(no_plainwords);
+	Plainwords ->
+	    Plainwords
     end.
 
 handle_possibilities(This, Cipherwords, Key, Possibilities) ->
