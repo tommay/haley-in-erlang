@@ -1,73 +1,100 @@
 -module(crypto).
 -export([main/1]).
 
--record(crypto, {dictionary, ciphertext}).
-
 main(Filename) ->
-    Dictionary = dictionary:new("../words"),
+    Dictionary = load_dictionary("../words"),
+    Ciphertext = load_ciphertext(Filename),
+    solve(Ciphertext, Dictionary).
+
+%% Returns a list of dictionary words, as binaries.
+%%
+load_dictionary(Filename) ->
+    {ok, Raw} = file:read_file(Filename),
+    Words = re:split(Raw, "\\n"),
+    [W || W <- Words,
+	  re:run(W, "[A-Z]") == nomatch].
+
+%% Returns the ciphertext, as a string.
+%%
+load_ciphertext(Filename) ->
     {ok, Ciphertext} = file:read_file(Filename),
-    Ciphertext2 = binary:bin_to_list(Ciphertext),
-    Crypto = new(Dictionary, Ciphertext2),
-    Cipherwords = re:split(Ciphertext, "\\s+", [{return, list}]),
-    Cipherwords2 = [Cw || Cw <- Cipherwords, Cw /= ""],
-    solutions(Crypto, Cipherwords2).
+    re:replace(Ciphertext, "#.*\n", "", [global, {return, list}]).
 
-new(Dictionary, Ciphertext) ->
-    #crypto{dictionary = Dictionary, ciphertext = Ciphertext}.
+solve(Ciphertext, Dictionary) ->
+    Cw = re:split(Ciphertext, "\\s+", [{return, list}]),
+    Cw2 = [W || W <- Cw, W /= ""],
+    Cipherwords = [word:new(W, Dictionary) || W <- Cw2],
+    solutions(Ciphertext, Cipherwords).
 
-solutions(This, Cipherwords) ->
-    solutions(This, Cipherwords, key:new()).
+solutions(Ciphertext, Cipherwords) ->
+    solutions(Ciphertext, Cipherwords, key:new()).
 
-solutions(_This, [], _Key) ->
+solutions(_Ciphertext, [], _Key) ->
     [];
-solutions(This, Cipherwords, Key) ->
-    try
-	[{Cw, get_plainwords(This, Cw, Key)} || Cw <- Cipherwords]
-    of
-	Possibilities ->
-	    handle_possibilities(This, Cipherwords, Key, Possibilities)
-    catch
-	throw:no_plainwords ->
-	    []
-    end.
+solutions(Ciphertext, Cipherwords, Key) ->
+    Cipherword = spud:min_by(
+		   Cipherwords,
+		   fun(Cw) -> word:dictionary_size(Cw) end),
 
-get_plainwords(This, Cw, Key) ->
-    case dictionary:plainwords(This#crypto.dictionary, Cw, Key) of
-	[] ->
-	    throw(no_plainwords);
-	Plainwords ->
-	    Plainwords
-    end.
-
-handle_possibilities(This, Cipherwords, Key, Possibilities) ->
-    {Cipherword, Plainwords} =
-	spud:min_by(
-	  Possibilities,
-	  fun ({_Cipherword, Plainwords}) ->
-		  erlang:length(Plainwords)
-	  end),
-    Cipherwords2 = Cipherwords -- [Cipherword],
     lists:flatmap(
       fun (Plainword) ->
-	      Key2 = make_key(Key, Cipherword, Plainword),
-	      case Cipherwords2 == [] of
-		  true ->
-		      output(This#crypto.ciphertext, Key2),
+	      case augment_key(Key, word:cipherword(Cipherword), Plainword) of
+		  none ->
 		      [];
-		  false ->
-		      solutions(This, Cipherwords2, Key2)
+		  NewKey ->
+		      case erlang:length(Cipherwords) == 1 of
+			  true ->
+			      output(Ciphertext, NewKey),
+			      []; %% [NewKey];
+			  false ->
+			      NewCipherwords = [word:filter(W, NewKey) ||
+						   W <- Cipherwords,
+						   W /= Cipherword],
+			      solutions(Ciphertext, NewCipherwords, NewKey)
+		      end
 	      end
       end,
-      Plainwords).
+      word:dictionary(Cipherword)).
 
-make_key(Key, Cipherword, Plainword) ->
+%% Given a cipherword and the plainword we are tentatively matching it
+%% to, return a new key based on the given key with
+%% cipherword->plainword letters filled in.  Return nil if it's not
+%% possible to make such a key because to cipher letters would need to
+%% map to the same plain letter.
+%%
+augment_key(Key, Cipherword, Plainword) ->
+    %% Don't allow the same plaintext letter to be mapped by two
+    %% different ciphertext letters.  The regexp matching prevents a
+    %% ciphertext letter from matching two different plaintext
+    %% letters.
+    InvertedKey = key:invert(Key),
     Zipped = lists:zip(Cipherword, binary:bin_to_list(Plainword)),
-    lists:foldl(
-      fun ({C, P}, Accum) ->
-	      key:set(Accum, C, P)
-      end,
-      Key,
-      Zipped).
+    IKey2 = lists:foldl(
+	      fun (_, none) ->
+		      none;
+		  ({C, P}, Accum) ->
+		      %% Is there already a mapping to this plaintext letter?
+		      case key:get(Accum, P) of
+			  unknown ->
+			      %% No.
+			      key:set(Accum, P, C);
+			  C ->
+			      %% P is already mapped by C.
+			      Accum;
+			  _ ->
+			      %% P is already mapped by a different
+			      %% cipher letter.
+			      none
+		      end
+	      end,
+	      InvertedKey,
+	      Zipped),
+    case IKey2 of
+	none ->
+	    none;
+	_ ->
+	    key:invert(IKey2)
+    end.
 
 output(Ciphertext, Key) ->
     Plaintext = [key:get(Key, C) || C <- Ciphertext],

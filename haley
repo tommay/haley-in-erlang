@@ -1,6 +1,13 @@
 #!/usr/bin/env escript
 %%! -pa ebin deps/spud/ebin
 
+%% A program to help solve the cryptograms in Haley's dialog in the
+%% Order of the Stick comic.  It finds all the cipher->plain keys such
+%% that every word in the output is a dictionary word.  But there are
+%% mistakes in the cryptograms, so it still takes a it of work.
+
+%% The cryptogram file can contain the usual hash-to-eol comments.
+
 %% escript:
 %% http://www.erlang.org/doc/man/escript.html
 %% http://erlangcentral.org/frame/?href=http%3A%2F%2Fwww.erlang.org%2Fdoc%2Fman%2Fescript.html#.VOF5BS4YMvg
@@ -17,3 +24,4 @@ main([Filename]) ->
     crypto:main(Filename);
 main(_) ->
     io:format("Usage: haley filename~n").
+    

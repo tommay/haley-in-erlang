@@ -1,28 +1,28 @@
--module(dictionary).
--export([new/1, plainwords/3]).
--compile(export_all).
+-module(word).
+-export([new/2, filter/2, dictionary_size/1, cipherword/1, dictionary/1]).
 
--record(dictionary, {words}).
+-record(word, {cipherword, dictionary}).
 
-new(Filename) ->
-    #dictionary{words = load_words(Filename)}.
+new(Cipherword, Dictionary) ->
+    new(Cipherword, Dictionary, key:new()).
 
-load_words(Filename) ->
-    {ok, Raw} = file:read_file(Filename),
-    re:split(Raw, "\\n").
+new(Cipherword, Dictionary, Key) ->
+    Dictionary2 = filter_dictionary(Cipherword, Dictionary, Key),
+    #word{cipherword = Cipherword, dictionary = Dictionary2}.
 
-plainwords(This, Cipherword, Key) ->
+cipherword(This) ->
+    This#word.cipherword.
+
+dictionary(This) ->
+    This#word.dictionary.
+
+filter(This, Key) ->
+    new(This#word.cipherword, This#word.dictionary, Key).
+
+filter_dictionary(Cipherword, Dictionary, Key) ->
     Regexp = make_regexp(Cipherword, Key),
-    lists:flatmap(
-      fun(W) ->
-	      case re:run(W, Regexp, [{capture, none}]) of
-		  match ->
-		      [W];
-		  _ ->
-		      []
-	      end
-      end,
-      This#dictionary.words).
+    [W || W <- Dictionary,
+	  re:run(W, Regexp, [{capture, none}]) == match].
 
 make_regexp(Cipherword, Key) ->
     Unknown = "[" ++ (lists:seq($a, $z) -- key:values(Key)) ++ "]",
@@ -62,13 +62,5 @@ make_regexp(Cipherword, Key, Unknown, [Letter | Rest], Seen, Accum) ->
 count(List, Obj) ->
     erlang:length([E || E <- List, E == Obj]).
 
-%%count(List, Obj) ->
-%%    lists:foldl(
-%%      fun(E, Count) ->
-%%	      case E == Obj of
-%%		  true -> Count + 1;
-%%		  false -> Count
-%%	      end
-%%      end,
-%%      0,
-%%      List).
+dictionary_size(This) ->
+    erlang:length(This#word.dictionary).
