@@ -106,33 +106,31 @@ add_to_key(Key, Cipherword, Plainword) ->
     %% Zip into {Ciperletter, Plainletter} pairs.
     Zipped = lists:zip(Cipherword, binary:bin_to_list(Plainword)),
     %% Fold the pair mappings into key.  Return 'fail' on collisions.
-    IKey2 = lists:foldl(
-	      fun (_, fail) ->
-		      %% The fold has already replaced the key with
-		      %% 'fail'.  Just propagate it up.
-		      fail;
-		  ({C, P}, Accum) ->
-		      %% Is there already a mapping to this plaintext letter?
-		      case key:get(Accum, P) of
-			  unknown ->
-			      %% No.  Add P -> C to the inverted key.
-			      key:set(Accum, P, C);
-			  C ->
-			      %% P is already mapped by C, no problem.
-			      Accum;
-			  _ ->
-			      %% P is already mapped by a different
-			      %% cipher letter.
-			      fail
-		      end
-	      end,
-	      InvertedKey,
-	      Zipped),
-    case IKey2 of
-	fail ->
-	    fail;
-	_ ->
+    try
+	lists:foldl(
+	  fun ({C, P}, Accum) ->
+		  %% Is there already a mapping to this plaintext letter?
+		  case key:get(Accum, P) of
+		      unknown ->
+			  %% No.  Add P -> C to the inverted key.
+			  key:set(Accum, P, C);
+		      C ->
+			  %% P is already mapped by C, no problem.
+			  Accum;
+		      _ ->
+			  %% P is already mapped by a different
+			  %% cipher letter.
+			  throw(fail)
+		  end
+	  end,
+	  InvertedKey,
+	  Zipped)
+    of
+	IKey2 ->
 	    key:invert(IKey2)
+    catch
+	throw:fail ->
+	    fail
     end.
 
 %% Replace letters in Ciphertext with their mappings from Key.
